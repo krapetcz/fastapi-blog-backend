@@ -24,5 +24,18 @@ def get_articles(
     offset: int = 0,
     limit: Annotated[int, Query(le=100)] = 100,
 ) -> list[Article]:
-    articles = session.exec(select(Article).offset(offset).limit(limit)).all()
+    statement = (
+        select(Article)
+        .order_by(Article.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    articles = session.exec(statement).all()
     return articles
+
+@router.get("/articles/{article_id}")
+def get_article(article_id: int, session: SessionDep) -> Article:
+    article = session.get(Article, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article
