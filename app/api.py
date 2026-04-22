@@ -10,11 +10,12 @@ Design notes:
 - For a portfolio-grade project, this file should clearly communicate intent and trade-offs.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import select
 
+from app.auth import get_current_user
 from app.models import Article
 from app.db import SessionDep
 
@@ -76,3 +77,20 @@ def get_article(article_id: int, session: SessionDep) -> Article:
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     return article
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic endpoint for verifying the Auth0 integration.
+# TODO: remove before production — leaks the full JWT payload to any caller
+# holding a valid token.
+# ---------------------------------------------------------------------------
+@router.get("/me")
+def whoami(claims: Annotated[dict[str, Any], Depends(get_current_user)]) -> dict[str, Any]:
+    """
+    Return the decoded JWT claims for the caller.
+
+    Requires a valid Auth0 Bearer token. Handy during setup to confirm that
+    signature/audience/issuer all line up and to see which claims Auth0 is
+    actually issuing (sub, email, email_verified, scope, etc.).
+    """
+    return claims
