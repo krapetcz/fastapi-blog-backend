@@ -10,14 +10,13 @@ Design notes:
 - For a portfolio-grade project, this file should clearly communicate intent and trade-offs.
 """
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query
+from sqlmodel import select
 
 from app.models import Article
 from app.db import SessionDep
-
-from typing import Annotated
-from fastapi import Query
-from sqlmodel import select
 
 
 router = APIRouter()
