@@ -12,10 +12,10 @@ Design notes:
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import select
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.models import Article
 from app.db import SessionDep
 
@@ -23,10 +23,10 @@ from app.db import SessionDep
 router = APIRouter()
 
 
-@router.post("/articles/")
+@router.post("/articles/", dependencies=[Depends(require_admin)])
 def create_article(article: Article, session: SessionDep) -> Article:
     """
-    Create a new article.
+    Create a new article. Admin-only.
 
     The incoming payload is mapped directly to the Article ORM model.
     After committing, we refresh the instance to return server-generated values
@@ -77,6 +77,58 @@ def get_article(article_id: int, session: SessionDep) -> Article:
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     return article
+
+
+@router.put("/articles/{article_id}", dependencies=[Depends(require_admin)])
+def update_article(
+    article_id: int,
+    payload: Article,
+    session: SessionDep,
+) -> Article:
+    """
+    Replace an existing article. Admin-only.
+
+    Server-managed fields (id, created_at) are preserved — only title and
+    content are taken from the payload. This is intentional: id is already
+    in the URL path, and created_at is the moment the article was authored,
+    which an edit should not rewrite.
+
+    Raises:
+        HTTPException(404): if the article does not exist.
+    """
+    article = session.get(Article, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    article.title = payload.title
+    article.content = payload.content
+    session.add(article)
+    session.commit()
+    session.refresh(article)
+    return article
+
+
+@router.delete(
+    "/articles/{article_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+def delete_article(article_id: int, session: SessionDep) -> None:
+    """
+    Delete an article by its ID. Admin-only.
+
+    Returns 204 No Content on success — no response body, consistent with
+    REST conventions for idempotent deletes.
+
+    Raises:
+        HTTPException(404): if the article does not exist.
+    """
+    article = session.get(Article, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    session.delete(article)
+    session.commit()
 
 
 # ---------------------------------------------------------------------------

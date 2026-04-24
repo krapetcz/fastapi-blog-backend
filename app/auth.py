@@ -9,6 +9,7 @@ Public surface:
 - bearer_scheme:     FastAPI security object (extracts the Bearer credentials)
 - verify_jwt:        pure function — verifies a token string, returns claims
 - get_current_user:  FastAPI dependency — yields claims dict, raises 401 on error
+- require_admin:     FastAPI dependency — passes only if claims.email is whitelisted
 
 Design notes:
 - We use HTTPBearer(auto_error=False) and raise our own 401 (with the
@@ -118,3 +119,44 @@ def get_current_user(
         raise _unauthorized("Expected Bearer authentication scheme")
 
     return verify_jwt(credentials.credentials, settings)
+
+
+def require_admin(
+    claims: Annotated[dict[str, Any], Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, Any]:
+    """
+    FastAPI dependency: allow only admins past.
+
+    Chains on top of get_current_user, so the caller must already have a
+    valid Auth0 JWT. Then checks the token's `email` claim against the
+    ADMIN_EMAILS whitelist from settings.
+
+    Raises:
+        403 Forbidden if:
+        - the token has no `email` claim (probably missing the 'email'
+          scope on the frontend — Auth0 only issues the claim when the
+          scope is granted), or
+        - the email is not on the whitelist.
+
+    Uses 403, not 401: the user IS authenticated, they just lack
+    permission. That's the distinction RFC 7235 expects.
+
+    Returns the same claims dict, so handlers can still read e.g. `sub`
+    if they need it.
+    """
+    email = claims.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Token has no 'email' claim — ensure the frontend requests "
+                "the 'email' scope when logging in with Auth0."
+            ),
+        )
+    if email.lower() not in settings.admin_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized",
+        )
+    return claims
