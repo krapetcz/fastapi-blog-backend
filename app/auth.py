@@ -121,6 +121,32 @@ def get_current_user(
     return verify_jwt(credentials.credentials, settings)
 
 
+# Namespace used for custom claims added via an Auth0 Action.
+# Auth0 requires custom claims on access tokens to be namespaced with a URL
+# to avoid collisions with standard OIDC claim names.
+_EMAIL_CLAIM_NAMESPACED = "https://api.krapetblog.local/email"
+
+
+def _extract_email(claims: dict[str, Any]) -> Optional[str]:
+    """
+    Pull the user's email out of the JWT claims.
+
+    Auth0 behavior, the short version:
+    - Requesting scope `email` at login guarantees the `email` claim in the
+      **ID token** and at the `/userinfo` endpoint.
+    - It does **not** guarantee the `email` claim on the **access token**
+      (which is what this backend sees). To get it there we add an Auth0
+      Action that sets a namespaced custom claim, e.g.
+      `https://api.krapetblog.local/email`.
+
+    We check the namespaced claim first, and fall back to a plain `email`
+    claim in case the tenant is configured to emit it directly. This keeps
+    the code working across Auth0 configurations without edits.
+    """
+    value = claims.get(_EMAIL_CLAIM_NAMESPACED) or claims.get("email")
+    return value if isinstance(value, str) and value else None
+
+
 def require_admin(
     claims: Annotated[dict[str, Any], Depends(get_current_user)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -129,14 +155,13 @@ def require_admin(
     FastAPI dependency: allow only admins past.
 
     Chains on top of get_current_user, so the caller must already have a
-    valid Auth0 JWT. Then checks the token's `email` claim against the
+    valid Auth0 JWT. Then checks the token's email claim against the
     ADMIN_EMAILS whitelist from settings.
 
     Raises:
         403 Forbidden if:
-        - the token has no `email` claim (probably missing the 'email'
-          scope on the frontend — Auth0 only issues the claim when the
-          scope is granted), or
+        - the token has no email claim (either the namespaced custom claim
+          added by our Auth0 Action, or a plain `email` claim), or
         - the email is not on the whitelist.
 
     Uses 403, not 401: the user IS authenticated, they just lack
@@ -145,13 +170,13 @@ def require_admin(
     Returns the same claims dict, so handlers can still read e.g. `sub`
     if they need it.
     """
-    email = claims.get("email")
+    email = _extract_email(claims)
     if not email:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Token has no 'email' claim — ensure the frontend requests "
-                "the 'email' scope when logging in with Auth0."
+                "Token has no email claim — configure an Auth0 Action to "
+                f"set `{_EMAIL_CLAIM_NAMESPACED}` on the access token."
             ),
         )
     if email.lower() not in settings.admin_emails:
