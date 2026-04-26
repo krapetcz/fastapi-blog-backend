@@ -1,15 +1,25 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlmodel import select
 
 from app.auth import get_current_user, require_admin
+from app.images import save_image
 from app.models import Article
 from app.schemas import ArticleRead, ArticleReadDetail, GalleryImageRead
 from app.db import SessionDep
 
 
 router = APIRouter()
+
+
+@router.post("/images", status_code=201)
+async def upload_image(
+    file: UploadFile = File(...),
+    _: dict = Depends(require_admin),
+) -> dict[str, str]:
+    url = await save_image(file)
+    return {"url": url}
 
 
 @router.post("/articles/", dependencies=[Depends(require_admin)])

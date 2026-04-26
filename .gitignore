@@ -6,3 +6,5 @@ venv/
 .venv/
 .env
 *.sqlite
+images/*
+!images/.gitkeep
