@@ -1,15 +1,3 @@
-"""
-API routes for the blog project.
-
-This module defines REST endpoints for working with Article entities.
-The routes are registered via FastAPI's APIRouter and then included in the main app.
-
-Design notes:
-- We use dependency injection for database sessions (SessionDep) to keep handlers clean.
-- Listing endpoint supports basic pagination (offset/limit) and sorts by newest first.
-- For a portfolio-grade project, this file should clearly communicate intent and trade-offs.
-"""
-
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,6 +5,7 @@ from sqlmodel import select
 
 from app.auth import get_current_user, require_admin
 from app.models import Article
+from app.schemas import ArticleRead, ArticleReadDetail, GalleryImageRead
 from app.db import SessionDep
 
 
@@ -25,37 +14,18 @@ router = APIRouter()
 
 @router.post("/articles/", dependencies=[Depends(require_admin)])
 def create_article(article: Article, session: SessionDep) -> Article:
-    """
-    Create a new article. Admin-only.
-
-    The incoming payload is mapped directly to the Article ORM model.
-    After committing, we refresh the instance to return server-generated values
-    (e.g., primary key, timestamps if the model defines defaults).
-
-    Returns:
-    The newly created Article.
-    """
     session.add(article)
     session.commit()
     session.refresh(article)
     return article
+
 
 @router.get("/articles/")
 def get_articles(
     session: SessionDep,
     offset: int = 0,
     limit: Annotated[int, Query(le=100)] = 100,
-) -> list[Article]:
-    """
-    Get a list of articles (newest first).
-
-    Pagination:
-        - offset: number of records to skip
-        - limit: max number of records returned (capped to 100)
-
-    Notes:
-        Sorting by created_at DESC matches typical blog UX where latest posts appear first.
-    """
+) -> list[ArticleRead]:
     statement = (
         select(Article)
         .order_by(Article.created_at.desc())
@@ -63,20 +33,36 @@ def get_articles(
         .limit(limit)
     )
     articles = session.exec(statement).all()
-    return articles
+    return [
+        ArticleRead(
+            id=a.id,
+            title=a.title,
+            content=a.content,
+            cover_image_url=a.cover_image_url,
+            created_at=a.created_at,
+        )
+        for a in articles
+    ]
+
 
 @router.get("/articles/{article_id}")
-def get_article(article_id: int, session: SessionDep) -> Article:
-    """
-    Get a single article by its ID.
-
-    Raises:
-    HTTPException(404): if the article does not exist.
-    """
+def get_article(article_id: int, session: SessionDep) -> ArticleReadDetail:
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    return article
+
+    gallery = sorted(article.gallery_images, key=lambda img: img.order)
+    return ArticleReadDetail(
+        id=article.id,
+        title=article.title,
+        content=article.content,
+        cover_image_url=article.cover_image_url,
+        created_at=article.created_at,
+        gallery_images=[
+            GalleryImageRead(id=img.id, url=img.url, alt=img.alt, order=img.order)
+            for img in gallery
+        ],
+    )
 
 
 @router.put("/articles/{article_id}", dependencies=[Depends(require_admin)])
@@ -85,17 +71,6 @@ def update_article(
     payload: Article,
     session: SessionDep,
 ) -> Article:
-    """
-    Replace an existing article. Admin-only.
-
-    Server-managed fields (id, created_at) are preserved — only title and
-    content are taken from the payload. This is intentional: id is already
-    in the URL path, and created_at is the moment the article was authored,
-    which an edit should not rewrite.
-
-    Raises:
-        HTTPException(404): if the article does not exist.
-    """
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -114,15 +89,6 @@ def update_article(
     dependencies=[Depends(require_admin)],
 )
 def delete_article(article_id: int, session: SessionDep) -> None:
-    """
-    Delete an article by its ID. Admin-only.
-
-    Returns 204 No Content on success — no response body, consistent with
-    REST conventions for idempotent deletes.
-
-    Raises:
-        HTTPException(404): if the article does not exist.
-    """
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -131,18 +97,6 @@ def delete_article(article_id: int, session: SessionDep) -> None:
     session.commit()
 
 
-# ---------------------------------------------------------------------------
-# Diagnostic endpoint for verifying the Auth0 integration.
-# TODO: remove before production — leaks the full JWT payload to any caller
-# holding a valid token.
-# ---------------------------------------------------------------------------
 @router.get("/me")
 def whoami(claims: Annotated[dict[str, Any], Depends(get_current_user)]) -> dict[str, Any]:
-    """
-    Return the decoded JWT claims for the caller.
-
-    Requires a valid Auth0 Bearer token. Handy during setup to confirm that
-    signature/audience/issuer all line up and to see which claims Auth0 is
-    actually issuing (sub, email, email_verified, scope, etc.).
-    """
     return claims
