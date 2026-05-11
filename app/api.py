@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlmodel import select
 
 from app.auth import get_current_user, require_admin
-from app.images import save_image
+from app.images import delete_image_file, save_image
 from app.models import Article
-from app.schemas import ArticleRead, ArticleReadDetail, GalleryImageRead
+from app.schemas import ArticleCreate, ArticleRead, ArticleReadDetail, ArticleUpdate, GalleryImageRead
 from app.db import SessionDep
 
 
@@ -22,12 +22,23 @@ async def upload_image(
     return {"url": url}
 
 
-@router.post("/articles/", dependencies=[Depends(require_admin)])
-def create_article(article: Article, session: SessionDep) -> Article:
+@router.post("/articles/", status_code=201, dependencies=[Depends(require_admin)])
+def create_article(payload: ArticleCreate, session: SessionDep) -> ArticleRead:
+    article = Article(
+        title=payload.title,
+        content=payload.content,
+        cover_image_url=payload.cover_image_url,
+    )
     session.add(article)
     session.commit()
     session.refresh(article)
-    return article
+    return ArticleRead(
+        id=article.id,
+        title=article.title,
+        content=article.content,
+        cover_image_url=article.cover_image_url,
+        created_at=article.created_at,
+    )
 
 
 @router.get("/articles/")
@@ -78,19 +89,30 @@ def get_article(article_id: int, session: SessionDep) -> ArticleReadDetail:
 @router.put("/articles/{article_id}", dependencies=[Depends(require_admin)])
 def update_article(
     article_id: int,
-    payload: Article,
+    payload: ArticleUpdate,
     session: SessionDep,
-) -> Article:
+) -> ArticleRead:
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
 
+    if article.cover_image_url != payload.cover_image_url:
+        if article.cover_image_url is not None:
+            delete_image_file(article.cover_image_url)
+
     article.title = payload.title
     article.content = payload.content
+    article.cover_image_url = payload.cover_image_url
     session.add(article)
     session.commit()
     session.refresh(article)
-    return article
+    return ArticleRead(
+        id=article.id,
+        title=article.title,
+        content=article.content,
+        cover_image_url=article.cover_image_url,
+        created_at=article.created_at,
+    )
 
 
 @router.delete(
@@ -102,6 +124,9 @@ def delete_article(article_id: int, session: SessionDep) -> None:
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
+
+    if article.cover_image_url is not None:
+        delete_image_file(article.cover_image_url)
 
     session.delete(article)
     session.commit()
