@@ -58,22 +58,24 @@ def _write_image(img: Image.Image, save_format: str, ext: str) -> str:
     filename = f"{uuid.uuid4()}.{ext}"
     dest = IMAGES_DIR / filename
     img.save(dest, format=save_format, **_SAVE_PARAMS[save_format])
-    logger.info("Saved image %s (format=%s)", filename, save_format)
     return f"/images/{filename}"
 
 
 async def save_image(file: UploadFile) -> str:
+    """Validate, re-encode, and persist an uploaded image. Returns the URL path."""
     contents = await file.read()
+    size = len(contents)
 
-    if len(contents) > MAX_UPLOAD_BYTES:
+    if size > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large, max 10 MB")
 
-    return await run_in_threadpool(
-        lambda: _write_image(*_process_image(contents))
-    )
+    url = await run_in_threadpool(lambda: _write_image(*_process_image(contents)))
+    logger.info("Image upload: original=%s bytes=%d url=%s", file.filename, size, url)
+    return url
 
 
 def delete_image_file(url: str) -> None:
+    """Delete an image file from disk. Logs a warning if not found, error on other failures."""
     filename = url.lstrip("/").removeprefix("images/")
     path = IMAGES_DIR / filename
     try:

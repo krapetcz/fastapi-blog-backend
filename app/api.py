@@ -6,24 +6,26 @@ from sqlmodel import select
 from app.auth import get_current_user, require_admin
 from app.images import delete_image_file, save_image
 from app.models import Article, GalleryImage
-from app.schemas import ArticleCreate, ArticleRead, ArticleReadDetail, ArticleUpdate, GalleryImageRead
+from app.schemas import ArticleCreate, ArticleRead, ArticleReadDetail, ArticleUpdate, GalleryImageRead, ImageUploadResponse
 from app.db import SessionDep
 
 
 router = APIRouter()
 
 
-@router.post("/images", status_code=201)
+@router.post("/images", status_code=201, response_model=ImageUploadResponse)
 async def upload_image(
     file: UploadFile = File(...),
     _: dict = Depends(require_admin),
-) -> dict[str, str]:
+) -> ImageUploadResponse:
+    """Accept and store an uploaded image file; return its URL."""
     url = await save_image(file)
-    return {"url": url}
+    return ImageUploadResponse(url=url)
 
 
 @router.post("/articles/", status_code=201, dependencies=[Depends(require_admin)])
 def create_article(payload: ArticleCreate, session: SessionDep) -> ArticleRead:
+    """Create a new article with optional cover image and gallery."""
     article = Article(
         title=payload.title,
         content=payload.content,
@@ -52,6 +54,7 @@ def get_articles(
     offset: int = 0,
     limit: Annotated[int, Query(le=100)] = 100,
 ) -> list[ArticleRead]:
+    """Return a paginated list of all articles without gallery images."""
     statement = (
         select(Article)
         .order_by(Article.created_at.desc())
@@ -73,6 +76,7 @@ def get_articles(
 
 @router.get("/articles/{article_id}")
 def get_article(article_id: int, session: SessionDep) -> ArticleReadDetail:
+    """Return a single article including gallery images sorted by order."""
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -97,6 +101,7 @@ def update_article(
     payload: ArticleUpdate,
     session: SessionDep,
 ) -> ArticleRead:
+    """Update article fields, cover image, and gallery with file cleanup on removal."""
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -140,6 +145,7 @@ def update_article(
     dependencies=[Depends(require_admin)],
 )
 def delete_article(article_id: int, session: SessionDep) -> None:
+    """Delete an article and remove all associated image files from disk."""
     article = session.get(Article, article_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
@@ -156,4 +162,5 @@ def delete_article(article_id: int, session: SessionDep) -> None:
 
 @router.get("/me")
 def whoami(claims: Annotated[dict[str, Any], Depends(get_current_user)]) -> dict[str, Any]:
+    """Return the decoded JWT claims of the authenticated user."""
     return claims
