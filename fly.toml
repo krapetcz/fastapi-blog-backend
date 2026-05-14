@@ -5,7 +5,7 @@
 #
 # See DEPLOY.md for the full deployment runbook.
 
-app = "krapetblog-api"
+app = "krapetblog"
 primary_region = "fra"
 
 [build]
