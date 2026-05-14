@@ -8,3 +8,5 @@ venv/
 *.sqlite
 images/*
 !images/.gitkeep
+.idea/
+.DS_Store
