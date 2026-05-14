@@ -1,0 +1,33 @@
+# fly.toml — Fly.io app configuration for krapetblog-api
+#
+# SECRETS (set via `fly secrets set`, NOT here):
+#   AUTH0_DOMAIN, AUTH0_AUDIENCE, AUTH0_ISSUER, ADMIN_EMAILS, CORS_ORIGINS
+#
+# See DEPLOY.md for the full deployment runbook.
+
+app = "krapetblog-api"
+primary_region = "fra"
+
+[build]
+
+[env]
+  DATABASE_PATH = "/data/fastapiblog.db"
+  IMAGES_DIR    = "/data/images"
+
+[mounts]
+  source      = "krapetblog_data"
+  destination = "/data"
+
+[http_service]
+  internal_port       = 8000
+  force_https         = true
+  auto_stop_machines  = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval     = "30s"
+    method       = "GET"
+    path         = "/health"
+    timeout      = "5s"
