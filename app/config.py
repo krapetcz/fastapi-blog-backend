@@ -54,16 +54,36 @@ class Settings(BaseSettings):
     @field_validator("admin_emails", mode="before")
     @classmethod
     def _split_admin_emails(cls, value):
-        """
-        Accept a comma-separated string in .env (ADMIN_EMAILS=a@x.com,b@x.com)
-        and turn it into a lowercased list. CSV is friendlier for a short
-        whitelist than the JSON format pydantic-settings would otherwise require.
-        """
         if isinstance(value, str):
             return [item.strip().lower() for item in value.split(",") if item.strip()]
         if isinstance(value, list):
             return [str(item).strip().lower() for item in value if str(item).strip()]
         return value
+
+    # --- Infrastructure -------------------------------------------------------
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default=["http://localhost:5173", "http://127.0.0.1:5173"],
+        description="Comma-separated list of allowed CORS origins.",
+    )
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, value):
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return value
+
+    database_path: str = Field(
+        default="fastapiblog.db",
+        description="Path to the SQLite database file.",
+    )
+
+    images_dir: str = Field(
+        default="images",
+        description="Directory where uploaded images are stored.",
+    )
 
 
 @lru_cache(maxsize=1)

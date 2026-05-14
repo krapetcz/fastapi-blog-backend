@@ -8,11 +8,14 @@ from PIL import Image
 from pillow_heif import register_heif_opener
 from starlette.concurrency import run_in_threadpool
 
+from app.config import get_settings
+
 register_heif_opener()
 
 logger = logging.getLogger(__name__)
 
-IMAGES_DIR = Path("images")
+IMAGES_DIR = Path(get_settings().images_dir)
+IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF"}
 

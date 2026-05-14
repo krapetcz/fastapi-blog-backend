@@ -14,19 +14,12 @@ from typing import Annotated
 from fastapi import Depends
 from sqlmodel import Session, create_engine
 
-# -------------------------------------------------------------------
-# Database configuration
-# -------------------------------------------------------------------
+from app.config import get_settings
 
-# SQLite database file (local development / portfolio setup)
-sqlite_file_name = "fastapiblog.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-
-# Required for SQLite when used with FastAPI (multi-threaded environment)
-connect_args = {"check_same_thread": False}
-
-# SQLModel engine (built on top of SQLAlchemy)
-engine = create_engine(sqlite_url, connect_args=connect_args)
+engine = create_engine(
+    f"sqlite:///{get_settings().database_path}",
+    connect_args={"check_same_thread": False},
+)
 
 
 # -------------------------------------------------------------------
