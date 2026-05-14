@@ -13,6 +13,11 @@ from app.db import SessionDep
 router = APIRouter()
 
 
+@router.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
 @router.post("/images", status_code=201, response_model=ImageUploadResponse)
 async def upload_image(
     file: UploadFile = File(...),
