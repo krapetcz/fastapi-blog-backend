@@ -1,35 +1,19 @@
 # FastAPI Blog Backend
 
-A simple blog backend built with FastAPI and SQLModel.
-
-This project serves as a portfolio example demonstrating clean API design,
-basic database interaction, and a clear application structure.
-The focus is on readability, maintainability, and understanding core concepts
-rather than feature completeness.
-
----
-
-## Purpose
-
-The goal of this project is to showcase:
-
-- REST API design using FastAPI
-- ORM usage with SQLModel (SQLAlchemy + Pydantic)
-- Dependency injection for database sessions
-- Clean and minimal project structure
-- Basic pagination and sorting logic
-
-The project is intentionally kept small to make the architecture
-and design decisions easy to understand.
+A blog backend built with FastAPI and SQLModel, featuring JWT-based authentication via Auth0, image uploads with automatic HEIC conversion, and schema management with Alembic.
 
 ---
 
 ## Tech Stack
 
-- Python
-- FastAPI
-- SQLModel
-- SQLite (local development)
+- **Python 3.12**
+- **FastAPI** — REST API framework
+- **SQLModel** — ORM (SQLAlchemy + Pydantic)
+- **SQLite** — database (on a persistent Fly.io volume in production)
+- **Alembic** — database migrations
+- **Auth0** — JWT authentication and authorisation
+- **Pillow / pillow-heif** — image re-encoding and HEIC support
+- **pydantic-settings** — typed environment-variable configuration
 
 ---
 
@@ -38,65 +22,91 @@ and design decisions easy to understand.
 ```text
 fastapiblog/
 ├─ app/
-│  ├─ api.py        # API route definitions
+│  ├─ api.py        # route definitions
+│  ├─ auth.py       # Auth0 JWT validation
+│  ├─ config.py     # pydantic-settings configuration
 │  ├─ db.py         # database engine and session dependency
-│  └─ models.py    # SQLModel ORM models
+│  ├─ images.py     # image upload and storage logic
+│  ├─ models.py     # SQLModel ORM models
+│  └─ schemas.py    # request / response schemas
+├─ alembic/         # Alembic migration environment
+│  └─ versions/     # migration scripts
 ├─ main.py          # application entry point
-├─ fastapiblog.db   # SQLite database
-└─ README.md
+├─ requirements.txt
+├─ Dockerfile
+├─ entrypoint.sh
+├─ fly.toml
+└─ .env.example
 ```
 
 ---
 
 ## API Overview
 
-The API provides basic CRUD functionality for blog articles.
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | — | Health check (used by Fly.io) |
+| GET | `/me` | JWT | Return decoded JWT claims |
+| GET | `/articles/` | — | List articles (paginated, newest first) |
+| POST | `/articles/` | admin | Create an article |
+| GET | `/articles/{id}` | — | Retrieve one article with gallery |
+| PUT | `/articles/{id}` | admin | Update article, cover image, and gallery |
+| DELETE | `/articles/{id}` | admin | Delete article and its images |
+| POST | `/images` | admin | Upload an image; returns its URL |
 
-- POST /articles/ – create a new article
-- GET /articles/ – list articles (paginated, newest first)
-- GET /articles/{id} – retrieve a single article by ID
-
-Interactive API documentation is available via Swagger UI.
+Write endpoints require a valid Auth0 JWT from an email listed in `ADMIN_EMAILS`.
 
 ---
 
 ## Design Notes
 
-- SQLModel is used to combine ORM models and request/response schemas
-- SQLite is used for simplicity and easy local setup
-- Database tables are created automatically on application startup
-- Pagination is implemented using offset and limit
-- CORS is enabled to allow access from a local frontend (e.g. React / Vite)
+- Schema is managed by Alembic migrations — run `alembic upgrade head` before the first start and after any schema change.
+- Uploaded images are stored in the configured `IMAGES_DIR` directory. In production this is `/data/images` on the Fly persistent volume.
+- HEIC images are automatically converted to JPEG on upload.
+- CORS origins, database path, and images directory are all driven by environment variables so the same image runs locally and on Fly.io without code changes.
 
 ---
 
-## Running the Project Locally
-
-1. Create and activate a virtual environment
-2. Install project dependencies
-3. Start the development server
+## Running Locally
 
 ```bash
+# 1. Copy and fill in the environment file
+cp .env.example .env
+# edit .env — set AUTH0_DOMAIN, AUTH0_AUDIENCE, AUTH0_ISSUER, ADMIN_EMAILS
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Apply migrations (creates the database on first run)
+alembic upgrade head
+
+# 5. Start the development server
 fastapi dev main.py
 ```
 
-The API will be available at:
-- http://127.0.0.1:8000
+- API: http://127.0.0.1:8000
 - Swagger UI: http://127.0.0.1:8000/docs
+
+---
+
+## Deployment
+
+See [DEPLOY.md](DEPLOY.md) for the step-by-step Fly.io deployment runbook.
 
 ---
 
 ## Future Improvements
 
-Possible next steps for extending the project:
-
-- Authentication and authorization for write endpoints
-- Separation of read/write schemas (DTOs)
-- Production-ready database (PostgreSQL)
-- Deployment configuration (Docker, cloud hosting)
+- PostgreSQL for higher-traffic workloads
+- Test suite (pytest + httpx)
+- CI/CD pipeline (GitHub Actions)
 
 ---
 
 ## Author
 
-This project was created as a personal learning and portfolio project.
+Personal learning and portfolio project.
