@@ -1,0 +1,14 @@
+.venv
+.git
+__pycache__
+*.pyc
+*.db
+*.sqlite
+images/
+.idea
+.DS_Store
+.env
+DEPLOY_SPEC.md
+DEPLOY_TASKS_BACKEND.md
+BACKEND_TASKS.md
+PROJECT_SPEC.md
